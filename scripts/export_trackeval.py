@@ -27,8 +27,15 @@ if __name__ == "__main__":
     # We will export the Clean and Whitebox datasets for MOT17-04
     # TrackEval requires the output filename to EXACTLY match the sequence name in the GT folder.
     sequences_to_export = [
+        ("data/MOT17/train/MOT17-02-FRCNN", "MOT17-02-FRCNN-Clean"),
+        ("data/MOT17/train/MOT17-02-FRCNN-Whitebox", "MOT17-02-FRCNN-Whitebox"),
+        ("data/MOT17/train/MOT17-02-FRCNN-Blackbox", "MOT17-02-FRCNN-Blackbox"),
         ("data/MOT17/train/MOT17-04-FRCNN", "MOT17-04-FRCNN-Clean"),
-        ("data/MOT17/train/MOT17-04-FRCNN-Whitebox", "MOT17-04-FRCNN-Whitebox")
+        ("data/MOT17/train/MOT17-04-FRCNN-Whitebox", "MOT17-04-FRCNN-Whitebox"),
+        ("data/MOT17/train/MOT17-04-FRCNN-Blackbox", "MOT17-04-FRCNN-Blackbox"),
+        ("data/MOT17/train/MOT17-09-FRCNN", "MOT17-09-FRCNN-Clean"),
+        ("data/MOT17/train/MOT17-09-FRCNN-Whitebox", "MOT17-09-FRCNN-Whitebox"),
+        ("data/MOT17/train/MOT17-09-FRCNN-Blackbox", "MOT17-09-FRCNN-Blackbox")
     ]
     
     # The painful, strict directory structure TrackEval requires
