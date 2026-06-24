@@ -68,7 +68,7 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             losses.backward()
             optimizer.step()
-            if i % 50 == 0: print(f"Baseline Forge | Epoch {epoch+1}/2 | Batch {i} | Loss: {losses.item():.4f}")
+            if i % 50 == 0: print(f"Baseline Forge | Epoch {epoch+1}/3 | Batch {i} | Loss: {losses.item():.4f}")
             
     os.makedirs("weights", exist_ok=True)
     # Save to a DIFFERENT file so we don't destroy your TAT weights
