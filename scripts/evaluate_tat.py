@@ -35,7 +35,7 @@ def get_iou(bb1, bb2):
     return intersection_area / float(bb1_area + bb2_area - intersection_area + 1e-8)
 
 def load_hardened_detector(weight_path):
-    print(f"[EVAL] Loading TAT-Hardened Feature Pyramid from {weight_path}...")
+    print(f"[EVAL] Loading Feature Pyramid from {weight_path}...")
     model = fasterrcnn_resnet50_fpn(weights=None)
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=2)
@@ -108,11 +108,13 @@ if __name__ == "__main__":
     
     detector = load_hardened_detector(cfg["paths"]["weights_out"])
     
-    print("\n" + "="*85)
-    print(f"{'TAT ARCHITECTURE: SPATIAL IoU SURVIVAL METRICS':^85}")
-    print("="*85)
-    print(f"{'Sequence':<30} | {'Target ID':<10} | {'Survived / Total':<20} | {'Survival Rate':<15}")
-    print("-" * 85)
+    # Buffer the output so we can print AND write to file
+    output_buffer = []
+    output_buffer.append("\n" + "="*85)
+    output_buffer.append(f"{'SPATIAL IoU SURVIVAL METRICS':^85}")
+    output_buffer.append("="*85)
+    output_buffer.append(f"{'Sequence':<30} | {'Target ID':<10} | {'Survived / Total':<20} | {'Survival Rate':<15}")
+    output_buffer.append("-" * 85)
     
     for seq in eval_seqs:
         if not os.path.exists(seq): continue
@@ -126,6 +128,21 @@ if __name__ == "__main__":
         survived, total = evaluate_sequence(seq, detector, target_id)
         rate = (survived / total) * 100 if total > 0 else 0
         
-        print(f"{base_name:<30} | {target_id:<10} | {f'{survived}/{total}':<20} | {rate:>5.1f}%")
+        output_buffer.append(f"{base_name:<30} | {target_id:<10} | {f'{survived}/{total}':<20} | {rate:>5.1f}%")
         
-    print("="*85)
+    output_buffer.append("="*85)
+    
+    final_text = "\n".join(output_buffer)
+    print(final_text)
+    
+    # Save to file
+    os.makedirs("outputs", exist_ok=True)
+    
+    # Extract model name dynamically so your logs don't overwrite each other
+    model_name = os.path.basename(cfg["paths"]["weights_out"]).split(".pth")[0]
+    log_path = f"outputs/survival_matrix_{model_name}.txt"
+    
+    with open(log_path, "w") as f:
+        f.write(final_text + "\n")
+        
+    print(f"\n[EVAL] Metrics successfully logged to {log_path}")
