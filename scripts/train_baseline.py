@@ -59,7 +59,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.SGD([p for p in model.parameters() if p.requires_grad], lr=0.005, momentum=0.9, weight_decay=0.0005)
     
     model.train()
-    for epoch in range(2): # 2 epochs is enough for standard domain adaptation
+    for epoch in range(3): 
         for i, (images, targets) in enumerate(loader):
             images = list(img.to(DEVICE) for img in images)
             targets = [{k: v.to(DEVICE) for k, v in t.items()} for t in targets]
