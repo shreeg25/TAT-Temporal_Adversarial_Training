@@ -88,7 +88,6 @@ def plot_comprehensive_survival_matrix():
         "MOT17-09": [95.8, 90.5, 90.5]
     }
     
-    # Create a 1x3 grid. sharey=True ensures the Y-axis is identical across all plots for honest comparison.
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
     
     x = np.arange(len(conditions))
@@ -99,11 +98,10 @@ def plot_comprehensive_survival_matrix():
         base_rates = baseline_data[seq]
         tat_rates = tat_data[seq]
         
-        # Vibrant contrasting colors
         rects1 = ax.bar(x - width/2, base_rates, width, label='Naive Baseline', 
-                        color='#D32F2F', edgecolor='black', linewidth=2.5, hatch='//') # Crimson
+                        color='#D32F2F', edgecolor='black', linewidth=2.5, hatch='//')
         rects2 = ax.bar(x + width/2, tat_rates, width, label='TAT Hardened', 
-                        color='#1976D2', edgecolor='black', linewidth=2.5) # Sapphire Blue
+                        color='#1976D2', edgecolor='black', linewidth=2.5)
         
         ax.set_title(seq, pad=15)
         ax.set_xticks(x)
@@ -113,22 +111,21 @@ def plot_comprehensive_survival_matrix():
         if i == 0:
             ax.set_ylabel("SURVIVAL RATE (%)")
         
-        # Put the master legend only on the middle subplot so it doesn't duplicate
-        if i == 1:
-            ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2, 
-                      frameon=True, edgecolor='black', fontsize=14, shadow=True).get_frame().set_linewidth(2)
-        
-        # Add exact percentage text above each bar
         for rect in rects1 + rects2:
             height = rect.get_height()
             ax.annotate(f'{height:.1f}%', xy=(rect.get_x() + rect.get_width() / 2, height),
                         xytext=(0, 5), textcoords="offset points",
                         ha='center', va='bottom', fontweight='bold', fontsize=11, color='black')
             
-    # Adjust layout to fit everything cleanly
     plt.tight_layout()
-    # Add extra space at the top so the legend doesn't get cut off
-    plt.subplots_adjust(top=0.85)
+    
+    # 1. Elevate the legend to the Figure level, totally independent of the subplots
+    fig.legend(['Naive Baseline', 'TAT Hardened'], loc='upper center', 
+               bbox_to_anchor=(0.5, 1.05), ncol=2, frameon=True, 
+               edgecolor='black', fontsize=14, shadow=True).get_frame().set_linewidth(2)
+               
+    # 2. Forcibly crush the top of the subplots down to 82% height to leave a massive blank header for the legend
+    plt.subplots_adjust(top=0.82)
     
     save_path = "outputs/figures/ieee_survival_comprehensive.png"
     plt.savefig(save_path)
