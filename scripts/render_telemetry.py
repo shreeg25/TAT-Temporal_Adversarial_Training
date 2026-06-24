@@ -23,52 +23,60 @@ def load_hardened_detector(weight_path):
 
 if __name__ == "__main__":
     cfg = yaml.safe_load(open("config.yaml"))
-    
-    # We explicitly render the Whitebox attack to prove the defense visually
-    seq_path = "data/MOT17/train/MOT17-04-FRCNN-Whitebox"
-    out_dir = "outputs/render_frames"
-    os.makedirs(out_dir, exist_ok=True)
-    
     detector = load_hardened_detector(cfg["paths"]["weights_out"])
-    tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=(DEVICE.type=='cuda'))
     
-    img_dir = os.path.join(seq_path, "img1")
-    frames = sorted([f for f in os.listdir(img_dir) if f.endswith('.jpg')])
+    # The complete Whitebox evaluation suite
+    target_seqs = [
+        "data/MOT17/train/MOT17-02-FRCNN-Whitebox",
+        "data/MOT17/train/MOT17-04-FRCNN-Whitebox",
+        "data/MOT17/train/MOT17-09-FRCNN-Whitebox"
+    ]
     
-    print(f"[RENDER] Processing frames from {seq_path}...")
-    
-    # Render just the first 50 frames to save your GPU time and get the screenshots you need
-    for frame_name in frames[:50]:
-        img_path = os.path.join(img_dir, frame_name)
-        bgr = cv2.imread(img_path)
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        
-        # Inference
-        tensor = torch.from_numpy(rgb).permute(2, 0, 1).float().div_(255.0).to(DEVICE)
-        with torch.no_grad():
-            preds = detector([tensor])[0]
+    for seq_path in target_seqs:
+        if not os.path.exists(seq_path):
+            print(f"[ERROR] Sequence missing: {seq_path}")
+            continue
             
-        labels, scores, boxes = preds["labels"].cpu().numpy(), preds["scores"].cpu().numpy(), preds["boxes"].cpu().numpy()
-        keep = (labels == 1) & (scores > 0.4)
-        boxes, scores = boxes[keep], scores[keep]
+        seq_name = os.path.basename(seq_path)
+        out_dir = f"outputs/render_frames/{seq_name}"
+        os.makedirs(out_dir, exist_ok=True)
         
-        xywh = [[float(x1), float(y1), float(x2 - x1), float(y2 - y1)] for (x1, y1, x2, y2) in boxes]
-        raw_dets = [[d, float(s), "1"] for d, s in zip(xywh, scores)]
+        # Re-initialize tracker per sequence to prevent DeepSORT ID contamination
+        tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=(DEVICE.type=='cuda'))
         
-        tracks = tracker.update_tracks(raw_dets, frame=rgb)
+        img_dir = os.path.join(seq_path, "img1")
+        frames = sorted([f for f in os.listdir(img_dir) if f.endswith('.jpg')])
         
-        # Draw colorful bounding boxes
-        for t in tracks:
-            if not t.is_confirmed(): continue
-            ltrb = t.to_ltrb()
-            x1, y1, x2, y2 = int(ltrb[0]), int(ltrb[1]), int(ltrb[2]), int(ltrb[3])
+        print(f"\n[RENDER] Processing {seq_name}...")
+        
+        # Rendering 50 frames per sequence to respect your 8GB VRAM time constraints
+        for frame_name in frames[:50]:
+            img_path = os.path.join(img_dir, frame_name)
+            bgr = cv2.imread(img_path)
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
             
-            # Bright Neon Green for TAT Tracking
-            cv2.rectangle(bgr, (x1, y1), (x2, y2), (0, 255, 0), 3)
-            # Magenta ID tag
-            cv2.putText(bgr, f"ID: {t.track_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
+            tensor = torch.from_numpy(rgb).permute(2, 0, 1).float().div_(255.0).to(DEVICE)
+            with torch.no_grad():
+                preds = detector([tensor])[0]
+                
+            labels, scores, boxes = preds["labels"].cpu().numpy(), preds["scores"].cpu().numpy(), preds["boxes"].cpu().numpy()
+            keep = (labels == 1) & (scores > 0.4)
+            boxes, scores = boxes[keep], scores[keep]
+            
+            xywh = [[float(x1), float(y1), float(x2 - x1), float(y2 - y1)] for (x1, y1, x2, y2) in boxes]
+            raw_dets = [[d, float(s), "1"] for d, s in zip(xywh, scores)]
+            
+            tracks = tracker.update_tracks(raw_dets, frame=rgb)
+            
+            for t in tracks:
+                if not t.is_confirmed(): continue
+                ltrb = t.to_ltrb()
+                x1, y1, x2, y2 = int(ltrb[0]), int(ltrb[1]), int(ltrb[2]), int(ltrb[3])
+                
+                # Neon Green Tracking Box
+                cv2.rectangle(bgr, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                cv2.putText(bgr, f"ID: {t.track_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
 
-        out_path = os.path.join(out_dir, frame_name)
-        cv2.imwrite(out_path, bgr)
-        
-    print(f"[SUCCESS] Visual telemetry rendered with colorful bounding boxes to {out_dir}")
+            cv2.imwrite(os.path.join(out_dir, frame_name), bgr)
+            
+    print(f"\n[SUCCESS] Visual telemetry rendered for all sequences.")
