@@ -18,7 +18,7 @@ data:
     - "data/MOT17/train/MOT17-09-FRCNN-Blackbox"
 
 paths:
-  weights_out: "weights/faster_rcnn_mot17.pth"
+  weights_out: "weights/faster_rcnn_mot17_baseline.pth"
 
 tracking:
   max_age: 30
