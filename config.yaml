@@ -1,16 +1,11 @@
 # config.yaml — TAT Architecture (Training & Evaluation)
 
 data:
-  # ── PHASE 1: TAT TRAINING ──
-  # The dual-stream loader will use these to dynamically find the Whitebox folders.
-  # NEVER put Blackbox paths here.
   train_sequences:
     - "data/MOT17/train/MOT17-02-FRCNN"
     - "data/MOT17/train/MOT17-04-FRCNN"
     - "data/MOT17/train/MOT17-09-FRCNN"
 
-  # ── PHASE 2: MASTER EVALUATION ──
-  # The exact sequence of folders your tracking parser will push DeepSORT through.
   eval_sequences:
     - "data/MOT17/train/MOT17-02-FRCNN"
     - "data/MOT17/train/MOT17-02-FRCNN-Whitebox"
@@ -23,12 +18,14 @@ data:
     - "data/MOT17/train/MOT17-09-FRCNN-Blackbox"
 
 paths:
-  # The hardened brain target location
   weights_out: "weights/faster_rcnn_mot17.pth"
 
 tracking:
-  # Immutable DeepSORT parameters for evaluation consistency
   max_age: 30
   n_init: 3
   nn_budget: 100
   max_cosine_distance: 0.4
+
+device:
+  use_gpu: true
+  gpu_id: 0
