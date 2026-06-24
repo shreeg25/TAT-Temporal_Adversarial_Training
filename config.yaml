@@ -1,38 +1,34 @@
-# config.yaml — PHASE 2: TARGET DISCRIMINATION
+# config.yaml — TAT Architecture (Training & Evaluation)
 
 data:
-  seq_path: data/MOT17/train/MOT17-04-FRCNN
-
+  # ── PHASE 1: TAT TRAINING ──
+  # The dual-stream loader will use these to dynamically find the Whitebox folders.
+  # NEVER put Blackbox paths here.
   train_sequences:
-    - data/MOT17/train/MOT17-02-FRCNN-Whitebox  # POISONED
-    - data/MOT17/train/MOT17-04-FRCNN-Whitebox  # POISONED
-    - data/MOT17/train/MOT17-09-FRCNN-Whitebox  # POISONED
+    - "data/MOT17/train/MOT17-02-FRCNN"
+    - "data/MOT17/train/MOT17-04-FRCNN"
+    - "data/MOT17/train/MOT17-09-FRCNN"
 
-reward:
-  w_rec:  5.0       
-  w_fp:   5.0       
-  w_lost: 0.5       
-  w_cost: 0.0       
-
-ppo:
-  total_timesteps: 100000 
-  n_steps: 512
-  batch_size: 128
-  n_epochs: 10
-  learning_rate: 0.0003
-  gamma: 0.99
-  gae_lambda: 0.95
-  clip_range: 0.2
-  initial_ent_coef: 0.08  # The initial shock to break the paralysis
-  final_ent_coef: 0.001   # The final convergence value
-  net_arch: [128, 128]
+  # ── PHASE 2: MASTER EVALUATION ──
+  # The exact sequence of folders your tracking parser will push DeepSORT through.
+  eval_sequences:
+    - "data/MOT17/train/MOT17-02-FRCNN"
+    - "data/MOT17/train/MOT17-02-FRCNN-Whitebox"
+    - "data/MOT17/train/MOT17-02-FRCNN-Blackbox"
+    - "data/MOT17/train/MOT17-04-FRCNN"
+    - "data/MOT17/train/MOT17-04-FRCNN-Whitebox"
+    - "data/MOT17/train/MOT17-04-FRCNN-Blackbox"
+    - "data/MOT17/train/MOT17-09-FRCNN"
+    - "data/MOT17/train/MOT17-09-FRCNN-Whitebox"
+    - "data/MOT17/train/MOT17-09-FRCNN-Blackbox"
 
 paths:
-  model_load: outputs/mtd_ppo_agent_phase3  # The brain we are starting with
-  model_save: outputs/mtd_ppo_agent_phase4  # The new brain we are forging
-  tb_logs: outputs/tb_logs
+  # The hardened brain target location
+  weights_out: "weights/faster_rcnn_mot17.pth"
 
-device:
-  use_gpu: true
-  gpu_id: 0
-  n_envs: 1         # MUST STAY 1 FOR 8GB VRAM                                        
+tracking:
+  # Immutable DeepSORT parameters for evaluation consistency
+  max_age: 30
+  n_init: 3
+  nn_budget: 100
+  max_cosine_distance: 0.4
