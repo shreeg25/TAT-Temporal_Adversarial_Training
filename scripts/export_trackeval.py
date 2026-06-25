@@ -40,7 +40,7 @@ if __name__ == "__main__":
     
     # The painful, strict directory structure TrackEval requires
     tracker_name = "TAT_Architecture"
-    eval_dir = f"TrackEval/data/trackers/mot_challenge/MOT17-train/{tracker_name}/data"
+    eval_dir = "TrackEval/data/trackers/mot_challenge/MOT17-train/Baseline_Architecture/data"
     os.makedirs(eval_dir, exist_ok=True)
     
     for seq_path, output_name in sequences_to_export:
