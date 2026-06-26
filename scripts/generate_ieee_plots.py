@@ -76,7 +76,6 @@ def plot_comprehensive_survival_matrix():
     sequences = ["MOT17-02", "MOT17-04", "MOT17-09"]
     conditions = ["Clean", "Whitebox", "Blackbox"]
     
-    # [Clean, Whitebox, Blackbox] - Extracted directly from your evaluation logs
     baseline_data = {
         "MOT17-02": [99.6, 44.3, 56.5],
         "MOT17-04": [99.8, 2.2, 65.7],
@@ -89,7 +88,6 @@ def plot_comprehensive_survival_matrix():
     }
     
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
-    
     x = np.arange(len(conditions))
     width = 0.35
     
@@ -118,21 +116,85 @@ def plot_comprehensive_survival_matrix():
                         ha='center', va='bottom', fontweight='bold', fontsize=11, color='black')
             
     plt.tight_layout()
-    
-    # 1. Elevate the legend to the Figure level, totally independent of the subplots
     fig.legend(['Naive Baseline', 'TAT Hardened'], loc='upper center', 
                bbox_to_anchor=(0.5, 1.05), ncol=2, frameon=True, 
                edgecolor='black', fontsize=14, shadow=True).get_frame().set_linewidth(2)
-               
-    # 2. Forcibly crush the top of the subplots down to 82% height to leave a massive blank header for the legend
     plt.subplots_adjust(top=0.82)
     
     save_path = "outputs/figures/ieee_survival_comprehensive.png"
     plt.savefig(save_path)
-    print(f"[PLOT] Comprehensive multi-sequence comparison saved to {save_path}")
+    print(f"[PLOT] Comprehensive survival matrix saved to {save_path}")
+    plt.close()
+
+def plot_trackeval_metrics():
+    """Plots the official TrackEval MOTA and IDF1 scores proving macro-level stability."""
+    sequences = ["MOT17-02", "MOT17-04", "MOT17-09"]
+    
+    # [Clean, Whitebox, Blackbox] extracted from TrackEval outputs
+    mota_data = {
+        "MOT17-02": [45.97, 46.19, 45.44],
+        "MOT17-04": [75.38, 75.40, 75.40],
+        "MOT17-09": [65.07, 64.81, 65.20]
+    }
+    idf1_data = {
+        "MOT17-02": [44.29, 43.43, 43.75],
+        "MOT17-04": [77.11, 77.09, 77.10],
+        "MOT17-09": [48.45, 47.23, 45.24]
+    }
+    
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    x = np.arange(len(sequences))
+    width = 0.25
+    
+    # IEEE Contrast Colors
+    c_clean = '#4CAF50'     # Emerald Green
+    c_whitebox = '#FF9800'  # Sunset Orange
+    c_blackbox = '#9C27B0'  # Deep Purple
+    
+    # --- PLOT 1: MOTA ---
+    ax1 = axes[0]
+    ax1.bar(x - width, [mota_data[s][0] for s in sequences], width, color=c_clean, edgecolor='black', linewidth=2.5)
+    ax1.bar(x, [mota_data[s][1] for s in sequences], width, color=c_whitebox, edgecolor='black', linewidth=2.5)
+    ax1.bar(x + width, [mota_data[s][2] for s in sequences], width, color=c_blackbox, edgecolor='black', linewidth=2.5)
+    
+    ax1.set_title("MACRO-ROBUSTNESS: MOTA", pad=15)
+    ax1.set_ylabel("MOTA (%)")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(sequences, fontweight='bold')
+    ax1.set_ylim(0, 100)
+    
+    # --- PLOT 2: IDF1 ---
+    ax2 = axes[1]
+    ax2.bar(x - width, [idf1_data[s][0] for s in sequences], width, color=c_clean, edgecolor='black', linewidth=2.5)
+    ax2.bar(x, [idf1_data[s][1] for s in sequences], width, color=c_whitebox, edgecolor='black', linewidth=2.5)
+    ax2.bar(x + width, [idf1_data[s][2] for s in sequences], width, color=c_blackbox, edgecolor='black', linewidth=2.5)
+    
+    ax2.set_title("IDENTITY PRESERVATION: IDF1", pad=15)
+    ax2.set_ylabel("IDF1 (%)")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(sequences, fontweight='bold')
+    ax2.set_ylim(0, 100)
+    
+    # Add labels above the bars
+    for ax, data_dict in zip([ax1, ax2], [mota_data, idf1_data]):
+        for i, seq in enumerate(sequences):
+            ax.annotate(f'{data_dict[seq][0]:.1f}', xy=(i - width, data_dict[seq][0]), xytext=(0, 5), textcoords="offset points", ha='center', va='bottom', fontweight='bold', fontsize=10)
+            ax.annotate(f'{data_dict[seq][1]:.1f}', xy=(i, data_dict[seq][1]), xytext=(0, 5), textcoords="offset points", ha='center', va='bottom', fontweight='bold', fontsize=10)
+            ax.annotate(f'{data_dict[seq][2]:.1f}', xy=(i + width, data_dict[seq][2]), xytext=(0, 5), textcoords="offset points", ha='center', va='bottom', fontweight='bold', fontsize=10)
+
+    plt.tight_layout()
+    fig.legend(['Clean Domain', 'Whitebox Attack', 'Blackbox Attack'], loc='upper center', 
+               bbox_to_anchor=(0.5, 1.05), ncol=3, frameon=True, 
+               edgecolor='black', fontsize=14, shadow=True).get_frame().set_linewidth(2)
+    plt.subplots_adjust(top=0.82)
+    
+    save_path = "outputs/figures/ieee_trackeval_metrics.png"
+    plt.savefig(save_path)
+    print(f"[PLOT] TrackEval MOTA/IDF1 macro-metrics saved to {save_path}")
     plt.close()
 
 if __name__ == "__main__":
     plot_comprehensive_survival_matrix()
     parse_and_plot_high_res_loss()
-    print("[SUCCESS] All IEEE visual telemetry generated.")
+    plot_trackeval_metrics()
+    print("\n[SUCCESS] All IEEE visual telemetry generated.")
