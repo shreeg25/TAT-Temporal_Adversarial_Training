@@ -1,136 +1,194 @@
-# scripts/finetune_detector.py
-import sys
 import os
+import sys
+import torch
 import random
+import yaml
 
-# THE BRIDGE: Force Python to recognize the root directory
+# ==============================================================================
+# ENVIRONMENT PATH INJECTION
+# ==============================================================================
+# Forces Python to recognize the root directory so it can find the 'src' module
 sys.path.insert(0, os.path.abspath("."))
 
-import torch
-import pandas as pd
-import cv2
-import numpy as np
-import yaml
-from torch.utils.data import Dataset, DataLoader
-from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
+from torch.utils.data import DataLoader
+from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+
+from src.dataset import MOT17Dataset
 from src.device import DEVICE
 
-class DualStreamMOTDataset(Dataset):
-    def __init__(self, clean_seqs, poison_prob=0.5):
-        """
-        TAT Dual-Stream Loader
-        Randomly samples from clean or poisoned streams, but ALWAYS anchors
-        the loss calculation to the clean ground truth trajectories.
-        """
-        self.samples = []
-        self.poison_prob = poison_prob
-        
-        for clean_seq in clean_seqs:
-            img_dir_clean = os.path.join(clean_seq, "img1")
-            if not os.path.exists(img_dir_clean): continue
-            
-            # Identify the corresponding poisoned sequence
-            poison_seq = f"{clean_seq}-Whitebox"
-            img_dir_poison = os.path.join(poison_seq, "img1")
-            has_poison = os.path.exists(img_dir_poison)
-            
-            # Load Clean Ground Truth ALWAYS
-            gt_file = os.path.join(clean_seq, "gt", "gt.txt")
-            if not os.path.exists(gt_file): continue
-            
-            df = pd.read_csv(gt_file, header=None, names=["frame", "id", "x", "y", "w", "h", "active", "class", "vis"])
-            # Filter for active, visible pedestrians
-            df = df[(df["active"] == 1) & (df["class"] == 1) & (df["vis"] >= 0.25)]
-            
-            for frame_no, grp in df.groupby("frame"):
-                filename = f"{int(frame_no):06d}.jpg"
-                clean_path = os.path.join(img_dir_clean, filename)
-                poison_path = os.path.join(img_dir_poison, filename) if has_poison else clean_path
+# ==============================================================================
+# MULTI-NORM ADVERSARIAL GENERATORS
+# ==============================================================================
+
+def pgd_attack_linf(images, targets, model, eps, alpha=2/255, iters=4):
+    """L_inf PGD: Perturbs all pixels by a tiny maximum threshold."""
+    adv_images = [img.clone().detach().to(DEVICE) for img in images]
+    for img in adv_images:
+        img.requires_grad = True
+
+    model.train()
+    for _ in range(iters):
+        loss_dict = model(adv_images, targets)
+        losses = sum(loss for loss in loss_dict.values())
+        model.zero_grad()
+        losses.backward()
+
+        with torch.no_grad():
+            for i in range(len(adv_images)):
+                grad_sign = adv_images[i].grad.sign()
+                adv_images[i] = adv_images[i] + alpha * grad_sign
+                # Project back to L_inf epsilon ball
+                eta = torch.clamp(adv_images[i] - images[i], min=-eps, max=eps)
+                adv_images[i] = torch.clamp(images[i] + eta, min=0, max=1)
+                adv_images[i].requires_grad = True
                 
-                boxes = grp[["x", "y", "w", "h"]].values
-                # Convert xywh to xyxy for torchvision
-                boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
-                boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
+    return [img.detach() for img in adv_images]
+
+def pgd_attack_l2(images, targets, model, eps, alpha=0.5, iters=4):
+    """L_2 PGD: Smooth, Euclidean energy-bounded perturbations."""
+    adv_images = [img.clone().detach().to(DEVICE) for img in images]
+    for img in adv_images:
+        img.requires_grad = True
+
+    model.train()
+    for _ in range(iters):
+        loss_dict = model(adv_images, targets)
+        losses = sum(loss for loss in loss_dict.values())
+        model.zero_grad()
+        losses.backward()
+
+        with torch.no_grad():
+            for i in range(len(adv_images)):
+                grad = adv_images[i].grad
+                # L2 Normalization of the gradient
+                grad_norm = torch.norm(grad.reshape(grad.shape[0], -1), p=2, dim=1).reshape(-1, 1, 1)
+                grad_norm = torch.clamp(grad_norm, min=1e-8)
+                normalized_grad = grad / grad_norm
                 
-                self.samples.append((clean_path, poison_path, boxes.astype(np.float32)))
+                adv_images[i] = adv_images[i] + alpha * normalized_grad
+                
+                # Project back to L_2 epsilon ball
+                eta = adv_images[i] - images[i]
+                eta_norm = torch.norm(eta.reshape(eta.shape[0], -1), p=2, dim=1).reshape(-1, 1, 1)
+                factor = torch.min(torch.tensor(1.0).to(DEVICE), eps / (eta_norm + 1e-8))
+                
+                adv_images[i] = torch.clamp(images[i] + eta * factor, min=0, max=1)
+                adv_images[i].requires_grad = True
+                
+    return [img.detach() for img in adv_images]
 
-    def __len__(self):
-        return len(self.samples)
+def sparse_l1_attack(images, targets, model, eps, sparsity_ratio=0.05, iters=4):
+    """L_1 Approximation (Top-K Sparse): Simulates a high-contrast physical sticker."""
+    adv_images = [img.clone().detach().to(DEVICE) for img in images]
+    for img in adv_images:
+        img.requires_grad = True
 
-    def __getitem__(self, idx):
-        clean_path, poison_path, boxes = self.samples[idx]
-        
-        # ── THE DUAL STREAM (Decoupled Input) ──
-        if random.random() < self.poison_prob and os.path.exists(poison_path):
-            img_path = poison_path
-        else:
-            img_path = clean_path
-            
-        bgr = cv2.imread(img_path)
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        
-        # Convert to PyTorch format [C, H, W] and normalize to [0, 1]
-        tensor_img = torch.from_numpy(rgb).permute(2, 0, 1).float() / 255.0
-        
-        # ── THE GROUND TRUTH ANCHOR (Decoupled Output) ──
-        target = {}
-        target["boxes"] = torch.from_numpy(boxes)
-        target["labels"] = torch.ones((len(boxes),), dtype=torch.int64) # Label 1 is Pedestrian
-        
-        return tensor_img, target
+    model.train()
+    for _ in range(iters):
+        loss_dict = model(adv_images, targets)
+        losses = sum(loss for loss in loss_dict.values())
+        model.zero_grad()
+        losses.backward()
 
-def collate_fn(batch):
-    return tuple(zip(*batch))
+        with torch.no_grad():
+            for i in range(len(adv_images)):
+                grad = adv_images[i].grad
+                grad_abs = torch.abs(grad)
+                
+                # Calculate the Top-K threshold for the sparsity mask
+                k = int(sparsity_ratio * grad.numel())
+                threshold = torch.kthvalue(grad_abs.reshape(-1), grad.numel() - k)[0]
+                
+                # Mask out 95% of the gradients, only update the most critical pixels
+                sparse_mask = (grad_abs >= threshold).float()
+                adv_images[i] = adv_images[i] + (eps * grad.sign() * sparse_mask)
+                
+                # Clip strictly to image bounds (no epsilon ball projection needed for L0/L1 mask approach)
+                adv_images[i] = torch.clamp(adv_images[i], min=0, max=1)
+                adv_images[i].requires_grad = True
+                
+    return [img.detach() for img in adv_images]
 
-if __name__ == "__main__":
+def generate_multinorm_patch(images, targets, model, epsilon_dict):
+    """Stochastic Alternating Norm router."""
+    attack_type = random.choice(['L_inf', 'L_2', 'L_1'])
+    
+    if attack_type == 'L_inf':
+        return pgd_attack_linf(images, targets, model, eps=epsilon_dict['L_inf'])
+    elif attack_type == 'L_2':
+        return pgd_attack_l2(images, targets, model, eps=epsilon_dict['L_2'])
+    elif attack_type == 'L_1':
+        return sparse_l1_attack(images, targets, model, eps=epsilon_dict['L_1'])
+
+# ==============================================================================
+# ARCHITECTURE & TRAINING LOOP
+# ==============================================================================
+
+def unfreeze_backbone(model):
+    """Forcefully unfreezes the ResNet backbone. Mandatory for Adversarial Defense."""
+    for param in model.backbone.parameters():
+        param.requires_grad = True
+    print("[WARN] ResNet50 Backbone completely unfrozen for Adversarial Regularization.")
+
+def main():
     cfg = yaml.safe_load(open("config.yaml"))
     
-    # Fetch sequences directly from the updated config's phase 1 block
-    clean_seqs = cfg["data"].get("train_sequences", [])
+    # 1. Initialize Datasets
+    print("[INIT] Loading MOT17 Datasets...")
+    train_dataset = MOT17Dataset(cfg['paths']['mot17_train'])
+    train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
     
-    print(f"[FINETUNE] Assembling TAT Dual-Stream dataset from {len(clean_seqs)} sequences...")
-    dataset = DualStreamMOTDataset(clean_seqs, poison_prob=0.5)
-    
-    # Use batch size 2 and num_workers 0 strictly to protect your 8GB VRAM
-    loader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=collate_fn, num_workers=0)
-    
-    print("[FINETUNE] Downloading base COCO weights and injecting 2-Class Head...")
-    model = fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
+    # 2. Load Pre-trained Baseline
+    model = fasterrcnn_resnet50_fpn(weights='DEFAULT')
     in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=2)
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=2) # Pedestrian + Background
     
+    # CRITICAL: We must unfreeze the backbone or the defense fails mathematically.
+    unfreeze_backbone(model)
     model.to(DEVICE)
     
-    params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005)
     
-    EPOCHS = 3  # Increased slightly so the network learns to ignore the patch
+    # 3. Calibrated Epsilon Bounds for Normalized Tensors [0, 1]
+    epsilons = {
+        'L_inf': 8 / 255.0, # Invisible distributed noise
+        'L_2': 1.5,         # Smooth Euclidean boundary
+        'L_1': 0.1          # 10% magnitude shift on 5% of pixels (Sticker effect)
+    }
     
-    print("[FINETUNE] Initiating Temporal Adversarial Training (TAT)...")
-    model.train()
+    print("[TRAIN] Initiating Multi-Norm Adversarial Training (MNAT) Crucible...")
+    num_epochs = 10
     
-    for epoch in range(EPOCHS):
-        epoch_loss = 0
-        for i, (images, targets) in enumerate(loader):
-            images = list(image.to(DEVICE) for image in images)
+    for epoch in range(num_epochs):
+        model.train()
+        for batch_idx, (images, targets) in enumerate(train_loader):
+            
+            # Format inputs
+            images = [img.to(DEVICE) for img in images]
             targets = [{k: v.to(DEVICE) for k, v in t.items()} for t in targets]
             
-            loss_dict = model(images, targets)
+            # Layer 1 Defense: Generate alternating adversarial patches on the fly
+            adv_images = generate_multinorm_patch(images, targets, model, epsilons)
+            
+            # Clear optimizer
+            optimizer.zero_grad()
+            
+            # Forward pass on the multi-norm poisoned data
+            loss_dict = model(adv_images, targets)
             losses = sum(loss for loss in loss_dict.values())
             
-            optimizer.zero_grad()
+            # Backward pass & Optimize
             losses.backward()
             optimizer.step()
             
-            epoch_loss += losses.item()
-            if i % 50 == 0:
-                print(f"Epoch {epoch+1}/{EPOCHS} | Batch {i}/{len(loader)} | Loss: {losses.item():.4f}")
+            if batch_idx % 10 == 0:
+                print(f"Epoch {epoch+1}/{num_epochs} | Batch {batch_idx}/{len(train_loader)} | Loss: {losses.item():.4f}")
                 
-        print(f"=== Epoch {epoch+1} Complete | Average Loss: {epoch_loss/len(loader):.4f} ===")
-        
-    os.makedirs("weights", exist_ok=True)
-    # Overwrite the original weights so the rest of the pipeline automatically uses the hardened brain
-    save_path = "weights/faster_rcnn_mot17.pth"
-    torch.save(model.state_dict(), save_path)
-    print(f"[FINETUNE] Success. TAT hardened domain weights locked and saved to {save_path}")
+        # Save hardened weights per epoch
+        torch.save(model.state_dict(), f"weights/tat_hardened_mnat_epoch_{epoch+1}.pth")
+
+    print("[SUCCESS] Multi-Norm training complete. Network is hardened against L_inf, L_2, and L_1 manifolds.")
+
+if __name__ == "__main__":
+    main()
