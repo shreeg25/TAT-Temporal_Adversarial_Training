@@ -1,21 +1,28 @@
-# src/device.py
-"""
-Central device resolver. Import `DEVICE` from here everywhere.
-Never hardcode 'cuda' or 'cpu' in other files.
-"""
 import torch
 import yaml
+import os
 
-def get_device(cfg: dict | None = None) -> torch.device:
-    if cfg is None:
-        cfg = yaml.safe_load(open("config.yaml"))
-    if cfg["device"]["use_gpu"] and torch.cuda.is_available():
-        dev = torch.device(f"cuda:{cfg['device']['gpu_id']}")
-        name = torch.cuda.get_device_name(dev)
-        vram = torch.cuda.get_device_properties(dev).total_memory / 1e9
-        print(f"[device] Using GPU: {name}  ({vram:.1f} GB VRAM)")
-        return dev
-    print("[device] GPU not available or disabled — using CPU")
-    return torch.device("cpu")
+def get_device():
+    """Parses the MNAT config and securely allocates the hardware tensor processor."""
+    config_path = "config.yaml"
+    
+    if not os.path.exists(config_path):
+        print("[WARN] config.yaml not found. Defaulting to CUDA if available.")
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+    with open(config_path, 'r') as f:
+        cfg = yaml.safe_load(f)
+        
+    # Safely extract from the new 'system' hierarchy
+    requested_device = cfg.get("system", {}).get("device", "cuda")
+    
+    if requested_device == "cuda" and torch.cuda.is_available():
+        print("[HARDWARE] CUDA constraint satisfied. Accelerating tensors on GPU.")
+        return torch.device("cuda")
+    else:
+        print("[HARDWARE] WARNING: CUDA unavailable or CPU explicitly requested.")
+        print("[HARDWARE] Running MNAT on a CPU will take weeks. Check your drivers.")
+        return torch.device("cpu")
 
+# Global device constant imported by all neural scripts
 DEVICE = get_device()
