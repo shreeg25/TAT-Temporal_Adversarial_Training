@@ -61,8 +61,18 @@ def evaluate_sequence(seq_path, model, target_id):
     
     total_target_frames = len(gt_trajectory)
     survived_frames = 0
-    
+
     for frame_name in frames:
+        # Force a dynamic PGD attack during evaluation
+        tensor.requires_grad = True
+        # Forward pass
+        preds = model([tensor])[0]
+        loss = ... # (Calculate loss on target gt box)
+        loss.backward()
+        # Apply perturbation
+        epsilon = 0.03 # Try setting this to 0.1, 0.2, or 0.3
+        perturbed_tensor = tensor + epsilon * tensor.grad.sign()
+        tensor = perturbed_tensor.detach()
         frame_no = int(frame_name.split('.')[0])
         
         # If the target is not even supposed to be in this frame, skip tracking evaluation
