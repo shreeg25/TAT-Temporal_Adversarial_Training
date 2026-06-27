@@ -2,3 +2,9 @@
 /weights
 venv
 src/__pycache__
+adversarial_attack_scripts/__pycache__/generate_poisoned_detections.cpython-311.pyc
+adversarial_attack_scripts/__pycache__/generate_whitebox_attack.cpython-311.pyc
+adversarial_attack_scripts/__pycache__/physical_renderer.cpython-311.pyc
+adversarial_attack_scripts/__pycache__/physical_renderer.cpython-314.pyc
+adversarial_attack_scripts/__pycache__/target_selector.cpython-311.pyc
+adversarial_attack_scripts/__pycache__/target_selector.cpython-314.pyc
