@@ -70,7 +70,7 @@ def pgd_attack_l2(images, targets, model, eps, alpha=0.5, iters=4):
                 
                 # Project back to L_2 epsilon ball
                 eta = adv_images[i] - images[i]
-                eta_norm = torch.norm(eta.reshape(eta.shape[0], -1), p=2, dim=1).reshape(-1, 1, 1)
+                eta_norm = torch.norm(eta.reshape(eta.shape[0], -1), p=2, dim=1).reshape                                                                (-1, 1, 1)
                 factor = torch.min(torch.tensor(1.0).to(DEVICE), eps / (eta_norm + 1e-8))
                 
                 adv_images[i] = torch.clamp(images[i] + eta * factor, min=0, max=1)
