@@ -1,4 +1,6 @@
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg') # Force non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -194,6 +196,9 @@ def plot_trackeval_metrics():
     plt.close()
 
 if __name__ == "__main__":
+    print(f"[DEBUG] Checking output directory: {os.path.abspath('outputs/figures')}")
+    plot_comprehensive_survival_matrix()
+    print("[DEBUG] Matrix plot finished.")
     plot_comprehensive_survival_matrix()
     parse_and_plot_high_res_loss()
     plot_trackeval_metrics()

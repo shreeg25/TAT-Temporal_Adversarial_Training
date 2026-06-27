@@ -24,35 +24,34 @@ if __name__ == "__main__":
     cfg = yaml.safe_load(open("config.yaml"))
     detector = load_hardened_detector(cfg["paths"]["weights_out"])
     
-    # We will export the Clean and Whitebox datasets for MOT17-04
-    # TrackEval requires the output filename to EXACTLY match the sequence name in the GT folder.
-    sequences_to_export = [
-        ("data/MOT17/train/MOT17-02-FRCNN", "MOT17-02-FRCNN-Clean"),
-        ("data/MOT17/train/MOT17-02-FRCNN-Whitebox", "MOT17-02-FRCNN-Whitebox"),
-        ("data/MOT17/train/MOT17-02-FRCNN-Blackbox", "MOT17-02-FRCNN-Blackbox"),
-        ("data/MOT17/train/MOT17-04-FRCNN", "MOT17-04-FRCNN-Clean"),
-        ("data/MOT17/train/MOT17-04-FRCNN-Whitebox", "MOT17-04-FRCNN-Whitebox"),
-        ("data/MOT17/train/MOT17-04-FRCNN-Blackbox", "MOT17-04-FRCNN-Blackbox"),
-        ("data/MOT17/train/MOT17-09-FRCNN", "MOT17-09-FRCNN-Clean"),
-        ("data/MOT17/train/MOT17-09-FRCNN-Whitebox", "MOT17-09-FRCNN-Whitebox"),
-        ("data/MOT17/train/MOT17-09-FRCNN-Blackbox", "MOT17-09-FRCNN-Blackbox")
-    ]
-    
-    # The painful, strict directory structure TrackEval requires
-    tracker_name = "TAT_Architecture"
-    eval_dir = "TrackEval/data/trackers/mot_challenge/MOT17-train/Baseline_Architecture/data"
+    # 1. Define target directory exactly where TrackEval expects it
+    # We use 'TAT_MNAT_Architecture' to match the folder you renamed
+    tracker_name = "TAT_MNAT_Architecture"
+    eval_dir = os.path.join("TrackEval", "data", "trackers", "mot_challenge", "MOT17-train", tracker_name, "data")
     os.makedirs(eval_dir, exist_ok=True)
     
-    for seq_path, output_name in sequences_to_export:
+    # 2. Dynamically fetch sequences from config
+    sequences_to_export = cfg["data"]["eval_sequences"]
+    
+    for seq_path in sequences_to_export:
         if not os.path.exists(seq_path):
+            print(f"[SKIP] Path not found: {seq_path}")
             continue
             
+        # 3. Determine output filename based on folder name
+        base_name = os.path.basename(seq_path)
+        if "Whitebox" in base_name or "Blackbox" in base_name:
+            out_name = f"{base_name}.txt"
+        else:
+            out_name = f"{base_name}-Clean.txt"
+            
+        output_txt_path = os.path.join(eval_dir, out_name)
+        print(f"[EXPORT] Processing {base_name} -> {output_txt_path}")
+        
+        # 4. Tracking Inference
         tracker = DeepSort(max_age=30, n_init=3, nn_budget=100, max_cosine_distance=0.4, embedder_gpu=(DEVICE.type=='cuda'))
         img_dir = os.path.join(seq_path, "img1")
         frames = sorted([f for f in os.listdir(img_dir) if f.endswith('.jpg')])
-        
-        output_txt_path = os.path.join(eval_dir, f"{output_name}.txt")
-        print(f"[EXPORT] Processing {output_name} -> {output_txt_path}")
         
         with open(output_txt_path, "w") as out_file:
             for frame_name in frames:
@@ -77,10 +76,7 @@ if __name__ == "__main__":
                 for t in tracks:
                     if not t.is_confirmed(): continue
                     ltrb = t.to_ltrb()
-                    # Convert to MOT17 required bounding box format (x_top_left, y_top_left, width, height)
                     x, y, w, h = ltrb[0], ltrb[1], ltrb[2] - ltrb[0], ltrb[3] - ltrb[1]
-                    
-                    # Formatting: <frame>, <id>, <bb_left>, <bb_top>, <bb_width>, <bb_height>, <conf>, <x>, <y>, <z>
                     out_file.write(f"{frame_idx},{t.track_id},{x:.2f},{y:.2f},{w:.2f},{h:.2f},1,-1,-1,-1\n")
                     
-    print("[SUCCESS] All tracking data formatted and injected into the TrackEval directory.")
+    print(f"[SUCCESS] Metrics exported to {eval_dir}")
