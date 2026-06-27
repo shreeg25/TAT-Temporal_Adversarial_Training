@@ -2,13 +2,21 @@
 # TAT-MNAT ARCHITECTURE CONFIGURATION
 # ==========================================================
 
+data:
+  # Explicitly list the sequences to evaluate
+  eval_sequences:
+    - "data/MOT17/train/MOT17-02-FRCNN"
+    - "data/MOT17/train/MOT17-02-FRCNN-Whitebox"
+    - "data/MOT17/train/MOT17-02-FRCNN-Blackbox"
+    - "data/MOT17/train/MOT17-04-FRCNN"
+    - "data/MOT17/train/MOT17-04-FRCNN-Whitebox"
+    - "data/MOT17/train/MOT17-04-FRCNN-Blackbox"
+    - "data/MOT17/train/MOT17-09-FRCNN"
+    - "data/MOT17/train/MOT17-09-FRCNN-Whitebox"
+    - "data/MOT17/train/MOT17-09-FRCNN-Blackbox"
+
 paths:
-  # The strict root directory for the raw, unpoisoned dataset
-  mot17_train: "data/MOT17/train"
-  
-  # Output directories
-  paths:
-  weights_out: "weights/tat_hardened_mnat_epoch_10.pth" # <-- Point it to the actual brain.
+  weights_out: "weights/tat_hardened_mnat_epoch_10.pth"
   figures_out: "outputs/figures/"
   trackeval_out: "TrackEval/data/trackers/mot_challenge/MOT17-train/"
 
@@ -20,12 +28,11 @@ training:
   weight_decay: 0.0005
 
 adversarial_bounds:
-  # Pre-calibrated epsilon constraints for normalized tensors [0, 1]
-  L_inf: 0.03137  # Approx 8/255 (Distributed noise)
-  L_2: 1.5        # Euclidean energy bound
-  L_1: 0.1        # Top-K sparse magnitude (Sticker effect)
-  L_1_sparsity: 0.05 # Only corrupt 5% of pixels
+  L_inf: 0.03137
+  L_2: 1.5
+  L_1: 0.1
+  L_1_sparsity: 0.05
 
 system:
-  device: "cuda"  # Do not attempt this on a CPU
+  device: "cuda"
   num_workers: 4
