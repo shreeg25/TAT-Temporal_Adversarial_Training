@@ -92,12 +92,32 @@ if __name__ == "__main__":
     results = []
     for seq in cfg["data"]["eval_sequences"]:
         base_name = os.path.basename(seq)
-        seq_key = base_name.split("-FRCNN")[0]
-        # Only evaluate if we have a valid target mapping for this sequence
-        if seq_key in TARGET_MAP:
-            survived, total = evaluate_sequence(seq, model, TARGET_MAP[seq_key], epsilon=TEST_EPSILON)
-            results.append(f"{base_name}: {survived}/{total} ({ (survived/total)*100:.1f}%)")
-            print(results[-1])
+        
+        # Extract the base sequence name (e.g., MOT17-10) regardless of the suffix
+        seq_key = base_name.replace("-FRCNN", "").replace("-Blackbox", "").replace("-Whitebox", "")
+        
+        target_id = TARGET_MAP.get(seq_key)
+        
+        # If the sequence isn't in our hardcoded map, auto-discover the longest trajectory
+        if target_id is None:
+            gt_file = os.path.join(seq, "gt", "gt.txt")
+            if os.path.exists(gt_file):
+                df = pd.read_csv(gt_file, header=None, names=["frame", "id", "x", "y", "w", "h", "active", "class", "vis"])
+                pedestrians = df[df["class"] == 1]
+                if not pedestrians.empty:
+                    target_id = pedestrians['id'].value_counts().idxmax()
+                    print(f"[*] Auto-selected Target ID {target_id} for {base_name} (Longest trajectory)")
+                else:
+                    print(f"[SKIP] No pedestrians found in {base_name}")
+                    continue
+            else:
+                print(f"[SKIP] No gt.txt found for {base_name}")
+                continue
+
+        # Execute evaluation
+        survived, total = evaluate_sequence(seq, model, target_id, epsilon=TEST_EPSILON)
+        results.append(f"{base_name}: {survived}/{total} ({ (survived/total)*100:.1f}%)")
+        print(results[-1])
 
     os.makedirs("outputs", exist_ok=True)
     log_path = f"outputs/robustness_eps_{str(TEST_EPSILON).replace('.', '_')}.txt"
