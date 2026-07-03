@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import xml.etree.ElementTree as ET
 import torch
 import torchvision
@@ -115,6 +116,7 @@ def evaluate_dataset(img_dir, xml_dir, split_file, model):
     # Final Metrics
     precision = total_true_positives / (total_true_positives + total_false_positives + 1e-6)
     recall = total_true_positives / (total_ground_truths + 1e-6)
+    f1 = 2 * precision * recall / (precision + recall + 1e-6)
     
     print("\n" + "="*50)
     print("ZERO-SHOT IDD METRICS (Adversarial Smoothing Impact)")
@@ -125,7 +127,22 @@ def evaluate_dataset(img_dir, xml_dir, split_file, model):
     print("-" * 50)
     print(f"Precision: {precision:.4f} (How many of its predictions were actually people?)")
     print(f"Recall:    {recall:.4f} (How many of the actual people did it find?)")
+    print(f"F1:        {f1:.4f}")
     print("="*50)
+
+    os.makedirs("outputs", exist_ok=True)
+    metrics_out = {
+        "total_ground_truths": total_ground_truths,
+        "true_positives": total_true_positives,
+        "false_positives": total_false_positives,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "iou_threshold": IOU_THRESHOLD,
+    }
+    with open("outputs/idd_zero_shot_metrics.json", "w") as f:
+        json.dump(metrics_out, f, indent=2)
+    print("[SAVED] outputs/idd_zero_shot_metrics.json")
 
 if __name__ == "__main__":
     WEIGHT_PATH = "weights/tat_hardened_mnat_epoch_10.pth"
