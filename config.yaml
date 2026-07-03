@@ -14,6 +14,13 @@ data:
     - "data/MOT17/train/MOT17-09-FRCNN"
     - "data/MOT17/train/MOT17-09-FRCNN-Whitebox"
     - "data/MOT17/train/MOT17-09-FRCNN-Blackbox"
+    - "data/MOT17/train/MOT17-10-FRCNN"
+    - "data/MOT17/train/MOT17-10-FRCNN-Whitebox"
+    - "data/MOT17/train/MOT17-10-FRCNN-Blackbox"
+    - "data/MOT17/train/MOT17-13-FRCNN"
+    - "data/MOT17/train/MOT17-13-FRCNN-Whitebox"
+    - "data/MOT17/train/MOT17-13-FRCNN-Blackbox"
+
 
 paths:
   weights_out: "weights/tat_hardened_mnat_epoch_10.pth"
