@@ -59,6 +59,7 @@ def load_hardened_detector(weight_path):
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=2)
     model.load_state_dict(torch.load(weight_path, map_location=DEVICE, weights_only=True))
     model.to(DEVICE)
+    model.eval()  # <-- Add this line to force evaluation mode permanently
     return model
 
 
