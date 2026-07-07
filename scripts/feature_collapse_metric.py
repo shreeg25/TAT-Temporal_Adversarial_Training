@@ -184,31 +184,43 @@ def plot_summary(rows):
         "savefig.dpi": 300, "savefig.bbox": "tight",
     })
 
+    # Preserve a stable, readable group order regardless of dict insertion order
+    ordered_keys = [
+        ("Baseline", "MOT17"), ("Baseline", "IDD"),
+        ("MNAT-Hardened", "MOT17"), ("MNAT-Hardened", "IDD"),
+    ]
     groups = {}
     for r in rows:
         key = (r["model"], r["domain"])
         groups.setdefault(key, {"sv": [], "ce": []})
         groups[key]["sv"].append(r["spatial_variance"])
         groups[key]["ce"].append(r["channel_entropy"])
+    ordered_keys = [k for k in ordered_keys if k in groups]
 
-    labels = [f"{m}\n{d}" for (m, d) in groups.keys()]
-    sv_means = [np.mean(v["sv"]) for v in groups.values()]
-    sv_stds = [np.std(v["sv"]) for v in groups.values()]
-    ce_means = [np.mean(v["ce"]) for v in groups.values()]
-    ce_stds = [np.std(v["ce"]) for v in groups.values()]
+    # Short two-line labels avoid the horizontal collision that comes from
+    # cramming "MNAT-Hardened\nIDD" into the same width as "Baseline\nMOT17"
+    label_map = {"Baseline": "Baseline", "MNAT-Hardened": "MNAT-\nHardened"}
+    labels = [f"{label_map[m]}\n{d}" for (m, d) in ordered_keys]
+    sv_means = [np.mean(groups[k]["sv"]) for k in ordered_keys]
+    sv_stds = [np.std(groups[k]["sv"]) for k in ordered_keys]
+    ce_means = [np.mean(groups[k]["ce"]) for k in ordered_keys]
+    ce_stds = [np.std(groups[k]["ce"]) for k in ordered_keys]
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
     x = np.arange(len(labels))
+    bar_width = 0.6
 
-    axes[0].bar(x, sv_means, yerr=sv_stds, capsize=5, color="#B2182B")
+    axes[0].bar(x, sv_means, yerr=sv_stds, capsize=5, color="#B2182B", width=bar_width)
     axes[0].set_xticks(x)
-    axes[0].set_xticklabels(labels)
+    axes[0].set_xticklabels(labels, fontsize=10, linespacing=1.4)
+    axes[0].set_xlim(-0.6, len(labels) - 0.4)
     axes[0].set_title("SPATIAL ACTIVATION VARIANCE (LAYER 4)")
     axes[0].set_ylabel("Variance (lower = flatter/collapsed)")
 
-    axes[1].bar(x, ce_means, yerr=ce_stds, capsize=5, color="#2166AC")
+    axes[1].bar(x, ce_means, yerr=ce_stds, capsize=5, color="#2166AC", width=bar_width)
     axes[1].set_xticks(x)
-    axes[1].set_xticklabels(labels)
+    axes[1].set_xticklabels(labels, fontsize=10, linespacing=1.4)
+    axes[1].set_xlim(-0.6, len(labels) - 0.4)
     axes[1].set_title("CHANNEL ENTROPY (LAYER 4)")
     axes[1].set_ylabel("Entropy (lower = fewer channels active)")
 
